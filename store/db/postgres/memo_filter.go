@@ -1,4 +1,4 @@
-package sqlite
+package postgres
 
 import (
 	"fmt"
@@ -94,11 +94,11 @@ func (d *DB) ConvertExprToSQL(ctx *filter.ConvertContext, expr *exprv1.Expr) err
 
 				var factor string
 				if identifier == "create_time" {
-					factor = "`memo`.`created_ts`"
+					factor = "memo.created_ts"
 				} else if identifier == "update_time" {
-					factor = "`memo`.`updated_ts`"
+					factor = "memo.updated_ts"
 				}
-				if _, err := ctx.Buffer.WriteString(fmt.Sprintf("%s %s ?", factor, operator)); err != nil {
+				if _, err := ctx.Buffer.WriteString(fmt.Sprintf("%s %s %s", factor, operator, placeholder(len(ctx.Args)+ctx.ArgsOffset+1))); err != nil {
 					return err
 				}
 				ctx.Args = append(ctx.Args, timestamp.Unix())
@@ -113,11 +113,11 @@ func (d *DB) ConvertExprToSQL(ctx *filter.ConvertContext, expr *exprv1.Expr) err
 
 				var factor string
 				if identifier == "visibility" {
-					factor = "`memo`.`visibility`"
+					factor = "memo.visibility"
 				} else if identifier == "content" {
-					factor = "`memo`.`content`"
+					factor = "memo.content"
 				}
-				if _, err := ctx.Buffer.WriteString(fmt.Sprintf("%s %s ?", factor, operator)); err != nil {
+				if _, err := ctx.Buffer.WriteString(fmt.Sprintf("%s %s %s", factor, operator, placeholder(len(ctx.Args)+ctx.ArgsOffset+1))); err != nil {
 					return err
 				}
 				ctx.Args = append(ctx.Args, valueStr)
@@ -146,7 +146,7 @@ func (d *DB) ConvertExprToSQL(ctx *filter.ConvertContext, expr *exprv1.Expr) err
 				subcodition := []string{}
 				args := []any{}
 				for _, v := range values {
-					subcodition, args = append(subcodition, "JSON_EXTRACT(`memo`.`payload`, '$.tags') LIKE ?"), append(args, fmt.Sprintf(`%%"%s"%%`, v))
+					subcodition, args = append(subcodition, fmt.Sprintf(`memo.payload->'tags' @> %s::jsonb`, placeholder(len(ctx.Args)+ctx.ArgsOffset+len(args)+1))), append(args, []any{v})
 				}
 				if len(subcodition) == 1 {
 					if _, err := ctx.Buffer.WriteString(subcodition[0]); err != nil {
@@ -159,11 +159,11 @@ func (d *DB) ConvertExprToSQL(ctx *filter.ConvertContext, expr *exprv1.Expr) err
 				}
 				ctx.Args = append(ctx.Args, args...)
 			} else if identifier == "visibility" {
-				placeholder := []string{}
-				for range values {
-					placeholder = append(placeholder, "?")
+				placeholders := []string{}
+				for i := range values {
+					placeholders = append(placeholders, placeholder(len(ctx.Args)+ctx.ArgsOffset+i+1))
 				}
-				if _, err := ctx.Buffer.WriteString(fmt.Sprintf("`memo`.`visibility` IN (%s)", strings.Join(placeholder, ","))); err != nil {
+				if _, err := ctx.Buffer.WriteString(fmt.Sprintf("memo.visibility IN (%s)", strings.Join(placeholders, ","))); err != nil {
 					return err
 				}
 				ctx.Args = append(ctx.Args, values...)
@@ -183,7 +183,7 @@ func (d *DB) ConvertExprToSQL(ctx *filter.ConvertContext, expr *exprv1.Expr) err
 			if err != nil {
 				return err
 			}
-			if _, err := ctx.Buffer.WriteString("`memo`.`content` LIKE ?"); err != nil {
+			if _, err := ctx.Buffer.WriteString("memo.content ILIKE LIKE " + placeholder(len(ctx.Args)+ctx.ArgsOffset+1)); err != nil {
 				return err
 			}
 			ctx.Args = append(ctx.Args, fmt.Sprintf("%%%s%%", arg))

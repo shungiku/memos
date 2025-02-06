@@ -1,4 +1,4 @@
-package sqlite
+package mysql
 
 import (
 	"fmt"
@@ -59,7 +59,7 @@ func (d *DB) ConvertExprToSQL(ctx *filter.ConvertContext, expr *exprv1.Expr) err
 			if err != nil {
 				return err
 			}
-			if !slices.Contains([]string{"create_time", "update_time", "visibility", "content"}, identifier) {
+			if !slices.Contains([]string{"create_time", "update_time"}, identifier) {
 				return errors.Errorf("invalid identifier for %s", v.CallExpr.Function)
 			}
 			value, err := filter.GetConstValue(v.CallExpr.Args[1])
@@ -98,7 +98,7 @@ func (d *DB) ConvertExprToSQL(ctx *filter.ConvertContext, expr *exprv1.Expr) err
 				} else if identifier == "update_time" {
 					factor = "`memo`.`updated_ts`"
 				}
-				if _, err := ctx.Buffer.WriteString(fmt.Sprintf("%s %s ?", factor, operator)); err != nil {
+				if _, err := ctx.Buffer.WriteString(fmt.Sprintf("UNIX_TIMESTAMP(%s) %s ?", factor, operator)); err != nil {
 					return err
 				}
 				ctx.Args = append(ctx.Args, timestamp.Unix())
@@ -146,7 +146,7 @@ func (d *DB) ConvertExprToSQL(ctx *filter.ConvertContext, expr *exprv1.Expr) err
 				subcodition := []string{}
 				args := []any{}
 				for _, v := range values {
-					subcodition, args = append(subcodition, "JSON_EXTRACT(`memo`.`payload`, '$.tags') LIKE ?"), append(args, fmt.Sprintf(`%%"%s"%%`, v))
+					subcodition, args = append(subcodition, "JSON_CONTAINS(JSON_EXTRACT(`memo`.`payload`, '$.tags'), ?)"), append(args, v)
 				}
 				if len(subcodition) == 1 {
 					if _, err := ctx.Buffer.WriteString(subcodition[0]); err != nil {
